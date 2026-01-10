@@ -61,4 +61,47 @@ Options:
                         (default for current machine is 8 cores)
 ```
 
+## Examples
+
+Make requests with default settings:
+```
+hey https://google.com
+```
+
+Make 1000 requests with 100 concurrent workers:
+```
+hey -n 1000 -c 100 https://google.com
+```
+
+Run load test for 30 seconds:
+```
+hey -z 30s https://google.com
+```
+
+Make POST request with custom body:
+```
+hey \
+    -m POST \
+    -d "param1=value1&param2=value2" \
+    https://google.com
+```
+
+Add custom headers:
+```
+hey \
+    -H "Accept: application/json" \
+    -H "Authorization: Bearer token" \
+    https://google.com
+```
+
+Test with HTTP/2:
+```
+hey -h2 https://google.com
+```
+
+Rate limit to 10 queries per second per worker:
+```
+hey -q 10 -c 5 -z 30s https://google.com
+```
+
 Previously known as [github.com/rakyll/boom](https://github.com/rakyll/boom).
