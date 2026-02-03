@@ -16,7 +16,8 @@ package requester
 
 import (
 	"bytes"
-	"io"
+	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -35,10 +36,12 @@ func TestN(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", server.URL, nil)
 	w := &Work{
-		Request: req,
-		N:       20,
-		C:       2,
+		Requests: []*http.Request{req},
+		N:        20,
+		C:        2,
+		R:        rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
+	w.LenRequests = len(w.Requests)
 	w.Run()
 	if count != 20 {
 		t.Errorf("Expected to send 20 requests, found %v", count)
@@ -56,11 +59,13 @@ func TestQps(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", server.URL, nil)
 	w := &Work{
-		Request: req,
-		N:       20,
-		C:       2,
-		QPS:     1,
+		Requests: []*http.Request{req},
+		N:        20,
+		C:        2,
+		QPS:      1,
+		R:        rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
+	w.LenRequests = len(w.Requests)
 	wg.Add(1)
 	time.AfterFunc(time.Second, func() {
 		if count > 2 {
@@ -90,10 +95,12 @@ func TestRequest(t *testing.T) {
 	req.Header = header
 	req.SetBasicAuth("username", "password")
 	w := &Work{
-		Request: req,
-		N:       1,
-		C:       1,
+		Requests: []*http.Request{req},
+		N:        1,
+		C:        1,
+		R:        rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
+	w.LenRequests = len(w.Requests)
 	w.Run()
 	if uri != "/" {
 		t.Errorf("Uri is expected to be /, %v is found", uri)
@@ -112,7 +119,7 @@ func TestRequest(t *testing.T) {
 func TestBody(t *testing.T) {
 	var count int64
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
+		body, _ := ioutil.ReadAll(r.Body)
 		if string(body) == "Body" {
 			atomic.AddInt64(&count, 1)
 		}
@@ -122,11 +129,13 @@ func TestBody(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", server.URL, bytes.NewBuffer([]byte("Body")))
 	w := &Work{
-		Request:     req,
+		Requests:    []*http.Request{req},
 		RequestBody: []byte("Body"),
 		N:           10,
 		C:           1,
+		R:           rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
+	w.LenRequests = len(w.Requests)
 	w.Run()
 	if count != 10 {
 		t.Errorf("Expected to work 10 times, found %v", count)

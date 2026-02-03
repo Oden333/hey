@@ -131,9 +131,7 @@ func (r *report) print() {
 		log.Println("error:", err.Error())
 		return
 	}
-	r.printf("%s", buf.String())
-
-	r.printf("\n")
+	r.printf("%v \n", buf.String())
 }
 
 func (r *report) printf(s string, v ...interface{}) {

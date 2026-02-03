@@ -18,8 +18,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"log"
 	"math"
+	"math/rand"
 	"net/http"
 	gourl "net/url"
 	"os"
@@ -29,7 +30,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rakyll/hey/requester"
+	"hey/requester"
+	"hey/source"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -66,7 +70,7 @@ var (
 	proxyAddr          = flag.String("x", "", "")
 )
 
-var usage = `Usage: hey [options...] <url>
+var usage = `Usage: hey [options...] <endpoints_file.yml>
 
 Options:
   -n  Number of requests to run. Default is 200.
@@ -136,13 +140,22 @@ func main() {
 			usageAndExit("-n cannot be less than -c.")
 		}
 	}
-
-	url := flag.Args()[0]
+	endpointsFile := flag.Args()[0]
 	method := strings.ToUpper(*m)
 
 	// set content-type
 	header := make(http.Header)
 	header.Set("Content-Type", *contentType)
+
+	// set userAgent header if set
+	ua := ""
+	if *userAgent != "" {
+		ua = *userAgent + " " + heyUA
+	} else {
+		ua = heyUA
+	}
+
+	header.Set("User-Agent", ua)
 	// set any other additional headers
 	if *headers != "" {
 		usageAndExit("Flag '-h' is deprecated, please use '-H' instead.")
@@ -175,7 +188,7 @@ func main() {
 		bodyAll = []byte(*body)
 	}
 	if *bodyFile != "" {
-		slurp, err := ioutil.ReadFile(*bodyFile)
+		slurp, err := os.ReadFile(*bodyFile)
 		if err != nil {
 			errAndExit(err.Error())
 		}
@@ -191,38 +204,41 @@ func main() {
 		}
 	}
 
-	req, err := http.NewRequest(method, url, nil)
+	//Забираем разные запросы
+	data, err := os.ReadFile(endpointsFile)
 	if err != nil {
-		usageAndExit(err.Error())
-	}
-	req.ContentLength = int64(len(bodyAll))
-	if username != "" || password != "" {
-		req.SetBasicAuth(username, password)
+		log.Fatal(err)
 	}
 
-	// set host header if set
-	if *hostHeader != "" {
-		req.Host = *hostHeader
+	endpoints := source.Endpoints{}
+	err = yaml.Unmarshal(data, &endpoints)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	ua := header.Get("User-Agent")
-	if ua == "" {
-		ua = heyUA
-	} else {
-		ua += " " + heyUA
+	//Массив requests
+	requests := make([]*http.Request, 0, len(endpoints.Data))
+	for _, endpoint := range endpoints.Data {
+		req, err := http.NewRequest(method, endpoint, nil)
+		if err != nil {
+			usageAndExit(err.Error())
+		}
+		req.ContentLength = int64(len(bodyAll))
+		if username != "" || password != "" {
+			req.SetBasicAuth(username, password)
+		}
+
+		// set host header if set
+		if *hostHeader != "" {
+			req.Host = *hostHeader
+		}
+
+		req.Header = header
+
+		requests = append(requests, req)
 	}
-	header.Set("User-Agent", ua)
-
-	// set userAgent header if set
-	if *userAgent != "" {
-		ua = *userAgent + " " + heyUA
-		header.Set("User-Agent", ua)
-	}
-
-	req.Header = header
-
 	w := &requester.Work{
-		Request:            req,
+		Requests:           requests,
 		RequestBody:        bodyAll,
 		N:                  num,
 		C:                  conc,
@@ -234,9 +250,10 @@ func main() {
 		H2:                 *h2,
 		ProxyAddr:          proxyURL,
 		Output:             *output,
+		LenRequests:        len(requests),
+		R:                  rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	w.Init()
-
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	go func() {
@@ -253,14 +270,14 @@ func main() {
 }
 
 func errAndExit(msg string) {
-	fmt.Fprintf(os.Stderr, "%s", msg)
+	fmt.Fprintf(os.Stderr, msg)
 	fmt.Fprintf(os.Stderr, "\n")
 	os.Exit(1)
 }
 
 func usageAndExit(msg string) {
 	if msg != "" {
-		fmt.Fprintf(os.Stderr, "%s", msg)
+		fmt.Fprintf(os.Stderr, msg)
 		fmt.Fprintf(os.Stderr, "\n\n")
 	}
 	flag.Usage()
